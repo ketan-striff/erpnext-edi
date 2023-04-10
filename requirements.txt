@@ -1,3 +1,4 @@
 # frappe -- https://github.com/frappe/frappe is installed via 'bench init'
 # paramiko==2.11.1
 pysftp==0.2.9
+pydifact==0.1.5
