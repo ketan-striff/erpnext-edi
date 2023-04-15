@@ -11,7 +11,9 @@
   "file_name",
   "content",
   "status",
-  "type"
+  "type",
+  "customer",
+  "edi_connection"
  ],
  "fields": [
   {
@@ -34,16 +36,29 @@
   {
    "default": "Pending",
    "fieldname": "status",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
    "options": "Pending\nDone",
    "reqd": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fieldname": "edi_connection",
+   "fieldtype": "Link",
+   "label": "EDI Connection",
+   "options": "EDI Connection"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2023-04-07 17:29:54.154169",
+ "modified": "2023-04-15 15:29:11.343657",
  "modified_by": "Administrator",
  "module": "Erpnext Edi",
  "name": "EDI Log",

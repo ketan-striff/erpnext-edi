@@ -15,7 +15,7 @@ def exec(connection):
     print(connection)
     docs = frappe.get_all(
         "EDI Connection",
-        fields=["host", "username", "private_key"],
+        fields=["host", "username", "private_key", "customer", "name"],
         filters={"is_incomming": True},
     )
     for doc in docs:
@@ -43,6 +43,9 @@ def exec(connection):
         root_file = "/download"
         files = ftp_client.listdir("/download")
         for file in files:
+            # existing = frappe.db.exists("EDI Log", file)
+            # if existing:
+            #     continue
             remote_file = f"{root_file}/{file}"
             # local_file = f"/tmp/file"
             with ftp_client.open(remote_file, "r") as f:
@@ -61,6 +64,8 @@ def exec(connection):
                 edi_log = frappe.new_doc("EDI Log")
                 edi_log.file_name = file
                 edi_log.content = line
+                edi_log.customer = doc.customer
+                edi_log.edi_connection = doc.name
                 edi_log.save()
                 frappe.db.commit()
                 f.close()

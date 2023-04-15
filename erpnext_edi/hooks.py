@@ -60,6 +60,22 @@ app_license = "MIT"
 # 	"filters": "erpnext_edi.utils.jinja_filters"
 # }
 
+jinja = {
+    "methods": [
+        "india_compliance.gst_india.utils.get_state",
+        "india_compliance.gst_india.utils.jinja.add_spacing",
+        "india_compliance.gst_india.utils.jinja.get_supply_type",
+        "india_compliance.gst_india.utils.jinja.get_sub_supply_type",
+        "india_compliance.gst_india.utils.jinja.get_e_waybill_qr_code",
+        "india_compliance.gst_india.utils.jinja.get_qr_code",
+        "india_compliance.gst_india.utils.jinja.get_transport_type",
+        "india_compliance.gst_india.utils.jinja.get_transport_mode",
+        "india_compliance.gst_india.utils.jinja.get_ewaybill_barcode",
+        "india_compliance.gst_india.utils.jinja.get_e_invoice_item_fields",
+        "india_compliance.gst_india.utils.jinja.get_e_invoice_amount_fields",
+    ],
+}
+
 # Installation
 # ------------
 
@@ -128,7 +144,8 @@ scheduler_events = {
     # 		"erpnext_edi.tasks.monthly"
     # 	],
     "cron": {
-        "*/5 * * * *": ["erpnext_edi.erpnext_edi.cron.get_edi_messages.fetch_messages"]
+        "*/5 * * * *": ["erpnext_edi.erpnext_edi.cron.get_edi_messages.fetch_messages"],
+        "*/7 * * * *": ["erpnext_edi.erpnext_edi.cron.process_edi_log.exec"],
     }
 }
 

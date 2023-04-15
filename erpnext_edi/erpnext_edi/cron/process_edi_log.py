@@ -1,16 +1,22 @@
+import frappe
 from pydifact.segmentcollection import Interchange
 from erpnext_edi.erpnext_edi.lib.edi import get_message_type, parse_date
 import json
+
+
+def exec():
+    frappe.enqueue(process_edi_log, queue="long")
+
 
 def process_edi_log():
     log_list = frappe.db.get_list(
         "EDI Log",
         filters={"status": "Pending"},
-        fields=["content", "name"],
+        fields=["content", "name", "customer", "edi_connection"],
     )
-    for edi_entry in log_list:
-        # print(edi_entry)
-        interchange = Interchange.from_str(edi_entry.content)
+    for edi_message in log_list:
+        # print(edi_message)
+        interchange = Interchange.from_str(edi_message.content)
         # header_segments = interchange.get_header_segment()
         # print(header_segments)
         # print(interchange)
@@ -19,7 +25,7 @@ def process_edi_log():
         message_type = get_message_type(interchange.get_segment("UNH"))
 
         if message_type == "ORDERS":
-            process_po(interchange)
+            process_po(interchange, edi_message)
             # print("PO")
 
         # break
@@ -31,12 +37,12 @@ def process_edi_log():
         #         )
 
 
-def process_po(interchange):
+def process_po(interchange, edi_message):
     items = []
     po_dict = {
         "naming_series": "SAL-ORD-.YYYY.-",
-        "customer": "Appario Retail Private Limited",
-        "customer_name": "Appario Retail Private Limited",
+        "customer": edi_message.customer,
+        "customer_name": edi_message.customer,
         "order_type": "Sales",
         "doctype": "Sales Order",
         "items": [],
@@ -88,6 +94,14 @@ def process_po(interchange):
                 ):  # means date and time of delivery after goods can not be delivered
                     date = parse_date(ele[1], ele[2])
                     po_dict["delivery_date"] = f"{date.year}-{date.month}-{date.day}"
+            elif segment.tag == "NAD":
+                if ele[0] == "WH":
+                    try:
+                        address = frappe.get_doc("Address", {"address_code": ele[1]})
+                        po_dict["customer_address"] = address.name
+                        po_dict["shipping_address_name"] = address.name
+                    except:
+                        pass
             elif segment.tag == "LIN":  # new line item starts
                 current_line_item_index = int(ele[0]) - 1
                 # print(current_line_item_index, "index")
@@ -99,13 +113,30 @@ def process_po(interchange):
                     print(item)
                     if not item:
                         frappe.throw("Item Code not found: " + item)
-                    item_code = frappe.db.get_value(
-                        "Item", {"item_code": item}, "item_code"
-                    )
+                    # item_code = frappe.db.get_value(
+                    #     "Item", {"item_code": item}, "item_code"
+                    # )
+                    item_code = None
                     if not item_code:
-                        item_code = frappe.db.get_value(
-                            "Item", {"alias_1": item}, "item_code"
+                        item_code = frappe.get_all(
+                            "Item",
+                            or_filters={
+                                "item_code": item,
+                                "alias_1": item,
+                                "alias_2": item,
+                                "alias_3": item,
+                                "alias_4": item,
+                                "alias_5": item,
+                                "alias_6": item,
+                                "alias_7": item,
+                                "alias_8": item,
+                                "alias_9": item,
+                                "alias_10": item,
+                            },
+                            limit=1,
                         )
+                        if len(item_code) > 0:
+                            item_code = item_code[0].name
                     if not item_code:
                         frappe.throw("Item Code not found: " + item)
                     current_line_item["item_code"] = item_code
@@ -139,10 +170,14 @@ def process_po(interchange):
         # po_dict.set("grand_total", base_total)
         # po_dict.set("rounded_total", base_total)
 
-        # print(json.dumps(po_dict))
+        print(json.dumps(po_dict))
         sales_order = frappe.get_doc(po_dict)
         sales_order.save()
         print(sales_order.as_json())
+        edi_log_doc = frappe.get_doc("EDI Log", edi_message.name)
+        edi_log_doc.type = "PO"
+        edi_log_doc.status = "Done"
+        edi_log_doc.save()
         frappe.db.commit()
 
 

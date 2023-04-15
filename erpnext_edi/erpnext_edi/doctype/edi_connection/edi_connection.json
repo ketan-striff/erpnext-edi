@@ -13,7 +13,9 @@
   "private_key",
   "is_incomming",
   "is_outgoing",
-  "customer"
+  "customer",
+  "default_customer_address",
+  "default_company_address"
  ],
  "fields": [
   {
@@ -59,11 +61,23 @@
    "label": "Customer",
    "options": "Customer",
    "reqd": 1
+  },
+  {
+   "fieldname": "default_customer_address",
+   "fieldtype": "Link",
+   "label": "Default Customer Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "default_company_address",
+   "fieldtype": "Link",
+   "label": "Default Company Address",
+   "options": "Address"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2023-04-09 00:46:06.077546",
+ "modified": "2023-04-15 15:16:17.868683",
  "modified_by": "Administrator",
  "module": "Erpnext Edi",
  "name": "EDI Connection",
