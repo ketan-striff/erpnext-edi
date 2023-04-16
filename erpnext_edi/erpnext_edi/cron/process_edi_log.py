@@ -26,11 +26,14 @@ def process_edi_log():
 
 
 def process_po(interchange, edi_message):
+    edi_connection_doc = frappe.get_doc("EDI Connection", edi_message.edi_connection)
+    customer = frappe.get_doc("Customer", edi_message.customer)
     items = []
     po_dict = {
         "naming_series": "SAL-ORD-.YYYY.-",
         "customer": edi_message.customer,
         "customer_name": edi_message.customer,
+        "selling_price_list": customer.default_price_list,
         "order_type": "Sales",
         "doctype": "Sales Order",
         "items": [],
@@ -64,7 +67,6 @@ def process_po(interchange, edi_message):
     current_line_item = {}
     is_po_ref_added = False
     is_nad_added = False
-    edi_connection_doc = frappe.get_doc("EDI Connection", edi_message.edi_connection)
     for message in interchange.get_messages():
         outgoing = Interchange(
             [edi_connection_doc.edi_supplier_id, "14"],
@@ -203,24 +205,24 @@ def process_po(interchange, edi_message):
         edi_log_doc.save()
         frappe.db.commit()
 
-        str_key = io.StringIO(edi_connection_doc.outgoing_private_key)
-        mykey = paramiko.RSAKey.from_private_key(str_key)
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.load_system_host_keys()
-        ssh_client.connect(
-            hostname=edi_connection_doc.outgoing_host,
-            username=edi_connection_doc.outgoing_username,
-            allow_agent=True,
-            pkey=mykey,
-        )
-        ftp_client = ssh_client.open_sftp()
-        file = ftp_client.file("/upload/855-" + edi_message.name, "a", -1)
-        print(file)
-        file.write(acknoledge_edi)
-        file.flush()
-        ftp_client.close()
-        ssh_client.close()
+        # str_key = io.StringIO(edi_connection_doc.outgoing_private_key)
+        # mykey = paramiko.RSAKey.from_private_key(str_key)
+        # ssh_client = paramiko.SSHClient()
+        # ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # ssh_client.load_system_host_keys()
+        # ssh_client.connect(
+        #     hostname=edi_connection_doc.outgoing_host,
+        #     username=edi_connection_doc.outgoing_username,
+        #     allow_agent=True,
+        #     pkey=mykey,
+        # )
+        # ftp_client = ssh_client.open_sftp()
+        # file = ftp_client.file("/upload/855-" + edi_message.name, "a", -1)
+        # print(file)
+        # file.write(acknoledge_edi)
+        # file.flush()
+        # ftp_client.close()
+        # ssh_client.close()
 
 
 def get_default_line_item():
