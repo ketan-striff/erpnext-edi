@@ -11,22 +11,13 @@ def fetch_messages():
 #     frappe.enqueue('myapp.mymodule.long_job', arg1=arg1, arg2=arg2)
 
 
-def exec(connection):
-    print(connection)
+def exec():
     docs = frappe.get_all(
         "EDI Connection",
         fields=["host", "username", "private_key", "customer", "name"],
         filters={"is_incomming": True},
     )
     for doc in docs:
-        # edi_connection = frappe.get_doc(
-        #     "EDI Connection",
-        #     connection,
-        # )
-        # privatekeyfile = ("/home/ketan/frappe-bench/sites/" +
-        #                   frappe.local.site + edi_connection.private_key)
-        # mykey = paramiko.RSAKey.from_private_key_file(privatekeyfile)
-
         str_key = io.StringIO(doc.private_key)
         mykey = paramiko.RSAKey.from_private_key(str_key)
         ssh_client = paramiko.SSHClient()
@@ -52,9 +43,9 @@ def exec(connection):
                 line = f.readline()
                 existing = frappe.db.exists("EDI Log", file)
                 if existing:
-                    doc = frappe.get_doc("EDI Log", file)
-                    if doc.content != line:
-                        print(doc.content)
+                    edi_log_doc = frappe.get_doc("EDI Log", file)
+                    if edi_log_doc.content != line:
+                        print(edi_log_doc.content)
                         print("==============")
                         print(line)
                         print("==============")
@@ -69,5 +60,6 @@ def exec(connection):
                 edi_log.save()
                 frappe.db.commit()
                 f.close()
-            print(file)
-            # ftp_client.remove(remote_file)
+                ftp_client.remove(remote_file)
+        ftp_client.close()
+        ssh_client.close()

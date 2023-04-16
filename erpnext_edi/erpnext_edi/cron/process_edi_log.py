@@ -1,7 +1,10 @@
 import frappe
-from pydifact.segmentcollection import Interchange
+from pydifact.segmentcollection import Message, Interchange
+from pydifact.segments import Segment
 from erpnext_edi.erpnext_edi.lib.edi import get_message_type, parse_date
 import json
+import paramiko
+import io
 
 
 def exec():
@@ -15,26 +18,11 @@ def process_edi_log():
         fields=["content", "name", "customer", "edi_connection"],
     )
     for edi_message in log_list:
-        # print(edi_message)
         interchange = Interchange.from_str(edi_message.content)
-        # header_segments = interchange.get_header_segment()
-        # print(header_segments)
-        # print(interchange)
-        # break
-
         message_type = get_message_type(interchange.get_segment("UNH"))
 
         if message_type == "ORDERS":
             process_po(interchange, edi_message)
-            # print("PO")
-
-        # break
-
-        # for message in interchange.get_messages():
-        #     for segment in message.segments:
-        #         print(
-        #             "Segment tag: {}, content: {}".format(segment.tag, segment.elements)
-        #         )
 
 
 def process_po(interchange, edi_message):
@@ -71,16 +59,44 @@ def process_po(interchange, edi_message):
     # Segment tag: UNS, content: ['S']
     # Segment tag: CNT, content: [['2', '1']]
     # Segment tag: UNT, content: ['20', '1']
+
     current_line_item_index = 0
     current_line_item = {}
+    is_po_ref_added = False
+    is_nad_added = False
+    edi_connection_doc = frappe.get_doc("EDI Connection", edi_message.edi_connection)
     for message in interchange.get_messages():
+        outgoing = Interchange(
+            [edi_connection_doc.edi_supplier_id, "14"],
+            [edi_connection_doc.edi_customer_id, "14"],
+            "14",
+            ["UNOA", "3"],
+        )
+        unh_message = Message("1", ["ORDRSP", "D", "96A", "UN", "EAN008"])
+        po_no = None
         for segment in message.segments:
             ele = segment.elements
             if segment.tag == "BGM":
                 if int(ele[0]) == 220:  # means order or po number
                     po_dict["po_no"] = ele[1]
+                    po_no = ele[1]
+                    unh_message.add_segment(Segment("BGM", "231", [po_no, "4"]))
                 else:
-                    frappe.throw("invalid bgm " + ele[0])
+                    frappe.log_error(
+                        "Invalid BGM",
+                        frappe.get_traceback(),
+                    )
+                    return False
+                    # frappe.throw("invalid bgm " + ele[0])
+            elif segment.tag == "RFF":
+                # RFF+ON:TZGTMRBN'
+                # RFF+CR:SNURW'
+                if not is_po_ref_added:
+                    is_po_ref_added = True
+                    unh_message.add_segment(Segment("RFF", ["ON", po_no]))
+                unh_message.add_segment(Segment(segment.tag, *ele))
+            elif segment.tag == "CUX" or segment.tag == "UNS":
+                unh_message.add_segment(Segment(segment.tag, *ele))
             elif segment.tag == "DTM":
                 ele = ele[0]
                 if (
@@ -88,6 +104,8 @@ def process_po(interchange, edi_message):
                 ):  # means date and time when document is issues should be PO date
                     # print(ele, ele[1], ele[2])
                     date = parse_date(ele[1], ele[2])
+                    unh_message.add_segment(Segment("DTM", ["137", ele[1], ele[2]]))
+                    unh_message.add_segment(Segment("DTM", ["171", ele[1], ele[2]]))
                     po_dict["po_date"] = f"{date.year}-{date.month}-{date.day}"
                 if (
                     int(ele[0]) == 63
@@ -95,6 +113,9 @@ def process_po(interchange, edi_message):
                     date = parse_date(ele[1], ele[2])
                     po_dict["delivery_date"] = f"{date.year}-{date.month}-{date.day}"
             elif segment.tag == "NAD":
+                if not is_nad_added:
+                    is_nad_added = True
+                    # unh_message.add_segment(Segment(segment.tag, *ele))
                 if ele[0] == "WH":
                     try:
                         address = frappe.get_doc("Address", {"address_code": ele[1]})
@@ -103,16 +124,24 @@ def process_po(interchange, edi_message):
                     except:
                         pass
             elif segment.tag == "LIN":  # new line item starts
+                unh_message.add_segment(Segment(segment.tag, ele))
                 current_line_item_index = int(ele[0]) - 1
                 # print(current_line_item_index, "index")
                 items.append(get_default_line_item())
                 current_line_item = items[current_line_item_index]
             elif segment.tag == "PIA":  # product information
+                # PIA+5+B09VZBGL1N:BP'
+                unh_message.add_segment(Segment(segment.tag, *ele))
                 if int(ele[0]) == 5:  # product itentification
                     item = ele[1][0]
                     print(item)
                     if not item:
-                        frappe.throw("Item Code not found: " + item)
+                        frappe.log_error(
+                            "Could not get Item from EDI message",
+                            frappe.get_traceback(),
+                        )
+                        return False
+                        # frappe.throw("Item Code not found: " + item)
                     # item_code = frappe.db.get_value(
                     #     "Item", {"item_code": item}, "item_code"
                     # )
@@ -138,47 +167,60 @@ def process_po(interchange, edi_message):
                         if len(item_code) > 0:
                             item_code = item_code[0].name
                     if not item_code:
-                        frappe.throw("Item Code not found: " + item)
+                        frappe.log_error(
+                            "Could not get Item from EDI message: " + item,
+                            frappe.get_traceback(),
+                        )
+                        return False
+                        # frappe.throw("Item Code not found: " + item)
                     current_line_item["item_code"] = item_code
                     # current_line_item["item_name"] = item_code
             elif segment.tag == "QTY":  # line item qty
                 ele = ele[0]
                 if int(ele[0]) == 21:  # ordered qty
+                    unh_message.add_segment(Segment(segment.tag, ["12", ele[1]]))
                     current_line_item["qty"] = int(ele[1])
             elif segment.tag == "PRI":  # line item price
+                unh_message.add_segment(Segment(segment.tag, *ele))
                 ele = ele[0]
                 if ele[0] == "AAA":  # price
                     current_line_item["rate"] = float(ele[1])
-            # print("Segment tag: {}, content: {}".format(segment.tag, segment.elements))
         po_dict["items"] = items
-        # total_qty = 0
-        # base_total = 0
-        # for item in items:
-        #     qty = item.get('qty')
-        #     rate = item.get('rate')
-        #     total = qty * rate
-        #     total_qty = total_qty + qty
-        #     base_total = base_total + total
 
-        # po_dict.set("total_qty", total_qty)
-        # po_dict.set("base_total", base_total)
-        # po_dict.set("base_net_total", base_total)
-        # po_dict.set("total", base_total)
-        # po_dict.set("net_total", base_total)
-        # po_dict.set("base_grand_total", base_total)
-        # po_dict.set("base_rounded_total", base_total)
-        # po_dict.set("grand_total", base_total)
-        # po_dict.set("rounded_total", base_total)
+        outgoing.add_message(unh_message)
 
-        print(json.dumps(po_dict))
+        acknoledge_edi = outgoing.serialize(True)
+        print(acknoledge_edi)
+
+        # print(json.dumps(po_dict))
         sales_order = frappe.get_doc(po_dict)
         sales_order.save()
         print(sales_order.as_json())
         edi_log_doc = frappe.get_doc("EDI Log", edi_message.name)
         edi_log_doc.type = "PO"
         edi_log_doc.status = "Done"
+        edi_log_doc.acknoledgement_edi = acknoledge_edi
         edi_log_doc.save()
         frappe.db.commit()
+
+        str_key = io.StringIO(edi_connection_doc.outgoing_private_key)
+        mykey = paramiko.RSAKey.from_private_key(str_key)
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.load_system_host_keys()
+        ssh_client.connect(
+            hostname=edi_connection_doc.outgoing_host,
+            username=edi_connection_doc.outgoing_username,
+            allow_agent=True,
+            pkey=mykey,
+        )
+        ftp_client = ssh_client.open_sftp()
+        file = ftp_client.file("/upload/855-" + edi_message.name, "a", -1)
+        print(file)
+        file.write(acknoledge_edi)
+        file.flush()
+        ftp_client.close()
+        ssh_client.close()
 
 
 def get_default_line_item():
