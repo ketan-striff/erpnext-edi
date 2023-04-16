@@ -4,7 +4,7 @@ import io
 
 
 def fetch_messages():
-    # frappe.enqueue(exec, queue="long")
+    frappe.enqueue(exec, queue="long")
     pass
 
 

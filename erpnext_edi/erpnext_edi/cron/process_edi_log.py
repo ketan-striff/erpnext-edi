@@ -9,6 +9,7 @@ import io
 
 def exec():
     frappe.enqueue(process_edi_log, queue="long")
+    pass
 
 
 def process_edi_log():
@@ -205,24 +206,24 @@ def process_po(interchange, edi_message):
         edi_log_doc.save()
         frappe.db.commit()
 
-        # str_key = io.StringIO(edi_connection_doc.outgoing_private_key)
-        # mykey = paramiko.RSAKey.from_private_key(str_key)
-        # ssh_client = paramiko.SSHClient()
-        # ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        # ssh_client.load_system_host_keys()
-        # ssh_client.connect(
-        #     hostname=edi_connection_doc.outgoing_host,
-        #     username=edi_connection_doc.outgoing_username,
-        #     allow_agent=True,
-        #     pkey=mykey,
-        # )
-        # ftp_client = ssh_client.open_sftp()
-        # file = ftp_client.file("/upload/855-" + edi_message.name, "a", -1)
-        # print(file)
-        # file.write(acknoledge_edi)
-        # file.flush()
-        # ftp_client.close()
-        # ssh_client.close()
+        str_key = io.StringIO(edi_connection_doc.outgoing_private_key)
+        mykey = paramiko.RSAKey.from_private_key(str_key)
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.load_system_host_keys()
+        ssh_client.connect(
+            hostname=edi_connection_doc.outgoing_host,
+            username=edi_connection_doc.outgoing_username,
+            allow_agent=True,
+            pkey=mykey,
+        )
+        ftp_client = ssh_client.open_sftp()
+        file = ftp_client.file("/upload/855-" + edi_message.name, "a", -1)
+        print(file)
+        file.write(acknoledge_edi)
+        file.flush()
+        ftp_client.close()
+        ssh_client.close()
 
 
 def get_default_line_item():
