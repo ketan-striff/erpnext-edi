@@ -4,7 +4,7 @@ import io
 
 
 def fetch_messages():
-    frappe.enqueue(exec, queue="long", connection=1)
+    frappe.enqueue(exec, queue="long")
 
 
 # def enqueue_long_job(arg1, args2):
