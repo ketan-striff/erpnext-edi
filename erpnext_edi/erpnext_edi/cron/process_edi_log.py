@@ -11,7 +11,6 @@ def exec():
     frappe.enqueue(process_edi_log, queue="long")
     pass
 
-
 def process_edi_log():
     log_list = frappe.db.get_list(
         "EDI Log",
@@ -121,6 +120,7 @@ def process_po(interchange, edi_message):
                     # unh_message.add_segment(Segment(segment.tag, *ele))
                 if ele[0] == "WH":
                     try:
+                        po_dict["vc_warehouse_code"] = ele[1]
                         address = frappe.get_doc("Address", {"address_code": ele[1]})
                         po_dict["customer_address"] = address.name
                         po_dict["shipping_address_name"] = address.name
@@ -177,6 +177,7 @@ def process_po(interchange, edi_message):
                         return False
                         # frappe.throw("Item Code not found: " + item)
                     current_line_item["item_code"] = item_code
+                    current_line_item["ASIN"] = item
                     # current_line_item["item_name"] = item_code
             elif segment.tag == "QTY":  # line item qty
                 ele = ele[0]
@@ -201,6 +202,7 @@ def process_po(interchange, edi_message):
         print(sales_order.as_json())
         edi_log_doc = frappe.get_doc("EDI Log", edi_message.name)
         edi_log_doc.type = "PO"
+        edi_log_doc.sale_order_dict = json.dumps(po_dict)
         edi_log_doc.status = "Done"
         edi_log_doc.acknoledgement_edi = acknoledge_edi
         edi_log_doc.save()
